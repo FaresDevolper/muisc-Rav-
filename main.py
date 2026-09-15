@@ -36,8 +36,8 @@ intents.guilds = True
 bot = commands.Bot(command_prefix="", intents=intents)
 
 # --- المتغيرات الثابتة (ضع الأيديهات الخاصة بك هنا) ---
-VOICE_CHANNEL_ID = 1234567890123456789  # ضع أيدي روم الصوت AFK هنا
-TEXT_CHANNEL_ID = 1234567890123456789  # ضع أيدي شات الأوامر هنا
+VOICE_CHANNEL_ID = 1549566092777619556  # ضع أيدي روم الصوت AFK هنا
+TEXT_CHANNEL_ID = 1549566092777619556  # ضع أيدي شات الأوامر هنا
 
 # متغيرات حالة الصوت لكل سيرفر
 current_volume = 1.0  # الصوت الافتراضي 100% (1.0 = 100%)
