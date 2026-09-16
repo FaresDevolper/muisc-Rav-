@@ -32,7 +32,6 @@ intents.guilds = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# الآيدي المرفق من قبلك
 VOICE_CHANNEL_ID = 1545761345352507503 
 TEXT_CHANNEL_ID = 1545761345352507503   
 
@@ -40,7 +39,6 @@ current_volume = 1.0
 current_song_info = {}
 song_start_time = 0 
 
-# إعدادات البحث والاستخراج الخاصة بـ SoundCloud فقط
 YTDL_OPTIONS = {
     "format": "bestaudio/best",
     "noplaylist": True,
@@ -49,7 +47,7 @@ YTDL_OPTIONS = {
     "logtostderr": False,
     "quiet": True,
     "no_warnings": True,
-    "default_search": "scsearch",  # البحث المباشر عبر SoundCloud
+    "default_search": "scsearch",
     "source_address": "0.0.0.0",
 }
 
@@ -76,7 +74,7 @@ async def on_ready():
     if not keep_afk_voice.is_running():
         keep_afk_voice.start()
 
-@tasks.loop(seconds=10)
+@tasks.loop(seconds=15)
 async def keep_afk_voice():
     try:
         channel = bot.get_channel(VOICE_CHANNEL_ID)
@@ -103,7 +101,7 @@ async def on_message(message):
 
     content = message.content.strip()
 
-    # --- أمر "تعال" للدخول إلى رومك الصوتي الحاضر فيه ---
+    # --- أمر تعال ---
     if content == "تعال" or (bot.user in message.mentions and "تعال" in content):
         if message.author.voice and message.author.voice.channel:
             target_channel = message.author.voice.channel
@@ -121,11 +119,11 @@ async def on_message(message):
                 return await message.reply(f"تم الانضمام إلى **{target_channel.name}** 👋", mention_author=False)
             except Exception as e:
                 print(f"خطأ عند دخول الروم عبر أمر تعال: {e}")
-                return await message.reply("تعذر الانضمام لرومك الصوتي.", mention_author=False)
+                return await message.reply(f"تعذر الانضمام: `{e}`", mention_author=False)
         else:
             return await message.reply("يجب أن تكون متواجدًا في روم صوتي أولاً!", mention_author=False)
 
-    # 1. أمر التشغيل (شاسم الأغنية أو رابط ساوندكلاود)
+    # 1. أمر التشغيل
     if content.startswith("ش "):
         song_query = content[2:].strip()
         if not song_query:
@@ -134,11 +132,17 @@ async def on_message(message):
         voice_client = message.guild.voice_client
         if not voice_client or not voice_client.is_connected():
             if message.author.voice and message.author.voice.channel:
-                voice_client = await message.author.voice.channel.connect(reconnect=True, self_deaf=True)
+                try:
+                    voice_client = await message.author.voice.channel.connect(reconnect=True, self_deaf=True)
+                except Exception as e:
+                    return await message.reply(f"فشل الاتصال بالروم: `{e}`", mention_author=False)
             else:
                 channel = bot.get_channel(VOICE_CHANNEL_ID)
                 if channel:
-                    voice_client = await channel.connect(reconnect=True, self_deaf=True)
+                    try:
+                        voice_client = await channel.connect(reconnect=True, self_deaf=True)
+                    except Exception as e:
+                        return await message.reply(f"فشل الاتصال بالروم الافتراضي: `{e}`", mention_author=False)
 
         async with message.channel.typing():
             try:
@@ -181,7 +185,7 @@ async def on_message(message):
 
             except Exception as e:
                 print(f"خطأ أثناء جلب المقطع من ساوندكلاود: {e}")
-                await message.reply("حدث خطأ أثناء محاولة تشغيل المقطع من SoundCloud.", mention_author=False)
+                await message.reply(f"حدث خطأ أثناء التشغيل: `{e}`", mention_author=False)
 
     # 2. أمر الإيقاف
     elif content == "وقف":
@@ -282,7 +286,7 @@ async def on_message(message):
                 await message.reply(reply_text, mention_author=False)
             except Exception as e:
                 print(f"خطأ أثناء إعادة الدخول للروم: {e}")
-                await message.reply("حدث خطأ أثناء محاولة إعادة الاتصال بالروم.", mention_author=False)
+                await message.reply(f"حدث خطأ أثناء محاولة إعادة الاتصال: `{e}`", mention_author=False)
 
 keep_alive()
 
