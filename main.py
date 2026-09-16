@@ -40,9 +40,9 @@ intents.message_content = True
 intents.voice_states = True
 intents.guilds = True
 
-# تم إيقاف الـ Command Processing التلقائي لتجنب أخطاء CommandNotFound
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# غيّر هذا الرقم إلى ID الروم الصوتي الجديد
 VOICE_CHANNEL_ID = 1545761345352507503 
 TEXT_CHANNEL_ID = 1545761345352507503   
 
@@ -83,7 +83,7 @@ async def on_ready():
             voice_client = channel.guild.voice_client
             if not voice_client or not voice_client.is_connected():
                 await channel.connect(reconnect=True, self_deaf=True)
-                print("تم الاتصال بالروم الصوتي الافتراضي بنجاح!")
+                print("تم الاتصال بالروم الصوتي بنجاح!")
     except Exception as e:
         print(f"خطأ في الاتصال الأولي: {e}")
         
@@ -117,7 +117,7 @@ async def on_message(message):
 
     content = message.content.strip()
 
-    # --- أمر تعال (يدعم الكلمة بمفردها أو مع منشن) ---
+    # --- أمر تعال ---
     if content == "تعال" or (bot.user in message.mentions and "تعال" in content):
         if message.author.voice and message.author.voice.channel:
             target_channel = message.author.voice.channel
@@ -134,8 +134,8 @@ async def on_message(message):
                     pass
                 return await message.reply(f"تم الانضمام إلى **{target_channel.name}** 👋", mention_author=False)
             except Exception as e:
-                print(f"خطأ في الانضمام عبر أمر تعال: {e}")
-                return await message.reply("تعذر الانضمام لرومك الصوتي. تأكد من إعطاء البوت صلاحية Connect و Speak في الروم!", mention_author=False)
+                print(f"تفاصيل الخطأ الكاملة عند دخول الروم: {e}")
+                return await message.reply(f"تعذر الانضمام: `{e}`", mention_author=False)
         else:
             return await message.reply("يجب أن تكون متواجدًا في روم صوتي أولاً!", mention_author=False)
 
