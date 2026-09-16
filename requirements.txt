@@ -1,5 +1,4 @@
-discord.py[voice]
+discord.py
 yt-dlp
+flask
 PyNaCl
-Flask
-aiohttp
