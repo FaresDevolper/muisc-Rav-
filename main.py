@@ -43,8 +43,8 @@ intents.guilds = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # غيّر هذا الرقم إلى ID الروم الصوتي الجديد
-VOICE_CHANNEL_ID = 1545761345352507503 
-TEXT_CHANNEL_ID = 1545761345352507503   
+VOICE_CHANNEL_ID = 1549782402694516736 
+TEXT_CHANNEL_ID = 1549782402694516736   
 
 current_volume = 1.0
 current_song_info = {}
