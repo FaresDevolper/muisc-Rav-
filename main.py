@@ -39,6 +39,7 @@ current_volume = 1.0
 current_song_info = {}
 song_start_time = 0 
 
+# إعدادات سرعة البحث والجلب من SoundCloud
 YTDL_OPTIONS = {
     "format": "bestaudio/best",
     "noplaylist": True,
@@ -49,6 +50,7 @@ YTDL_OPTIONS = {
     "no_warnings": True,
     "default_search": "scsearch",
     "source_address": "0.0.0.0",
+    "extract_flat": False,
 }
 
 FFMPEG_OPTIONS = {
@@ -123,7 +125,7 @@ async def on_message(message):
         else:
             return await message.reply("يجب أن تكون متواجدًا في روم صوتي أولاً!", mention_author=False)
 
-    # 1. أمر التشغيل
+    # 1. أمر التشغيل السريع
     if content.startswith("ش "):
         song_query = content[2:].strip()
         if not song_query:
@@ -144,48 +146,47 @@ async def on_message(message):
                     except Exception as e:
                         return await message.reply(f"فشل الاتصال بالروم الافتراضي: `{e}`", mention_author=False)
 
-        async with message.channel.typing():
-            try:
-                loop = asyncio.get_event_loop()
-                search_target = song_query if song_query.startswith(("http://", "https://")) else f"scsearch:{song_query}"
-                
-                data = await loop.run_in_executor(
-                    None,
-                    lambda: ytdl.extract_info(search_target, download=False),
-                )
+        try:
+            loop = asyncio.get_event_loop()
+            search_target = song_query if song_query.startswith(("http://", "https://")) else f"scsearch:{song_query}"
+            
+            data = await loop.run_in_executor(
+                None,
+                lambda: ytdl.extract_info(search_target, download=False),
+            )
 
-                if "entries" in data and len(data["entries"]) > 0:
-                    data = data["entries"][0]
+            if "entries" in data and len(data["entries"]) > 0:
+                data = data["entries"][0]
 
-                stream_url = data["url"]
-                song_title = data.get("title", "Unknown Title")
+            stream_url = data["url"]
+            song_title = data.get("title", "Unknown Title")
 
-                current_song_info = {
-                    "title": song_title,
-                    "url": stream_url,
-                    "duration": data.get("duration", 0),
-                    "requester": message.author.display_name,
-                    "current_position": 0
-                }
-                song_start_time = time.time()
+            current_song_info = {
+                "title": song_title,
+                "url": stream_url,
+                "duration": data.get("duration", 0),
+                "requester": message.author.display_name,
+                "current_position": 0
+            }
+            song_start_time = time.time()
 
-                if voice_client.is_playing() or voice_client.is_paused():
-                    voice_client.stop()
+            if voice_client.is_playing() or voice_client.is_paused():
+                voice_client.stop()
 
-                source = discord.FFmpegPCMAudio(stream_url, **FFMPEG_OPTIONS)
-                transformer = discord.PCMVolumeTransformer(source, volume=current_volume)
+            source = discord.FFmpegPCMAudio(stream_url, **FFMPEG_OPTIONS)
+            transformer = discord.PCMVolumeTransformer(source, volume=current_volume)
 
-                voice_client.play(
-                    transformer,
-                    after=lambda e: print(f"خطأ بالتشغيل: {e}") if e else None,
-                )
+            voice_client.play(
+                transformer,
+                after=lambda e: print(f"خطأ بالتشغيل: {e}") if e else None,
+            )
 
-                response_text = f"*Playing song* : **{song_title}**\n*by* : **{message.author.display_name}**"
-                await message.reply(response_text, mention_author=False)
+            response_text = f"*Playing song* : **{song_title}**\n*by* : **{message.author.display_name}**"
+            await message.reply(response_text, mention_author=False)
 
-            except Exception as e:
-                print(f"خطأ أثناء جلب المقطع من ساوندكلاود: {e}")
-                await message.reply(f"حدث خطأ أثناء التشغيل: `{e}`", mention_author=False)
+        except Exception as e:
+            print(f"خطأ أثناء جلب المقطع من ساوندكلاود: {e}")
+            await message.reply(f"حدث خطأ أثناء التشغيل: `{e}`", mention_author=False)
 
     # 2. أمر الإيقاف
     elif content == "وقف":
@@ -200,7 +201,7 @@ async def on_message(message):
             stop_text = f"*Stopped playing by* : **{message.author.display_name}**"
             await message.reply(stop_text, mention_author=False)
 
-    # 3. أمر التقديم
+    # 3. أمر التقديم المصلح والمباشر
     elif content.startswith("قدم"):
         parts = content.split()
         if len(parts) > 1 and parts[1].isdigit():
@@ -217,15 +218,17 @@ async def on_message(message):
 
                     voice_client.stop()
 
-                    seek_options = {
+                    seek_ffmpeg_options = {
                         "before_options": f"-ss {new_pos} -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-                        "options": "-vn -fflags +genpts"
+                        "options": f"-vn -filter:a \"volume={current_volume}\""
                     }
 
-                    source = discord.FFmpegPCMAudio(current_song_info["url"], **seek_options)
-                    transformer = discord.PCMVolumeTransformer(source, volume=current_volume)
+                    source = discord.FFmpegPCMAudio(current_song_info["url"], **seek_ffmpeg_options)
 
-                    voice_client.play(transformer)
+                    voice_client.play(
+                        source,
+                        after=lambda e: print(f"خطأ بعد التقديم: {e}") if e else None
+                    )
 
                     try:
                         await message.add_reaction("✅")
@@ -249,7 +252,8 @@ async def on_message(message):
 
                 voice_client = message.guild.voice_client
                 if voice_client and voice_client.source:
-                    voice_client.source.volume = current_volume
+                    if isinstance(voice_client.source, discord.PCMVolumeTransformer):
+                        voice_client.source.volume = current_volume
 
                 reply_text = f"*Volume changed from* `{old_vol_percent}%` *to* `{new_vol}%` ."
                 await message.reply(reply_text, mention_author=False)
