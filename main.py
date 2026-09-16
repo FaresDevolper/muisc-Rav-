@@ -32,6 +32,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 VOICE_CHANNEL_ID = 1545761345352507503 
 TEXT_CHANNEL_ID = 1545761345352507503   
+LOG_CHANNEL_ID = 1425806157120929814  # 👈 ضَع هنا ID روم اللوق الخاص بسيرفرك
 
 current_volume = 1.0  # الصوت الافتراضي (100%)
 
@@ -169,6 +170,13 @@ async def on_message(message):
 
             response_text = f"*Playing song* : **{song_title}**\n*by* : **{message.author.display_name}**"
             await message.reply(response_text, mention_author=False)
+
+            # --- كود إرسال اللوق عند شغل الأغنية ---
+            if LOG_CHANNEL_ID:
+                log_channel = bot.get_channel(LOG_CHANNEL_ID)
+                if log_channel:
+                    log_msg = f"🎵 **[LOG]** {message.author.mention} شغل **{song_title}** بواسطة `{bot.user.name}`"
+                    await log_channel.send(log_msg)
 
         except Exception as e:
             print(f"خطأ أثناء جلب المقطع من ساوندكلاود: {e}")
