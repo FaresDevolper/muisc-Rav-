@@ -46,7 +46,7 @@ intents.guilds = True
 
 bot = commands.Bot(command_prefix="", intents=intents)
 
-VOICE_CHANNEL_ID = 1545761345352507503  # أيدي روم الصوت
+VOICE_CHANNEL_ID = 1545761345352507503  # أيدي روم الصوت الافتراضي
 TEXT_CHANNEL_ID = 1545761345352507503   # أيدي الشات
 
 current_volume = 1.0
@@ -76,10 +76,12 @@ FFMPEG_OPTIONS = {
     "options": "-vn -filter:a \"volume=1.0\"",
 }
 
+# --- تعريف كائن ytdl (السطر الذي كان مفقوداً) ---
+ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
+
 @bot.event
 async def on_ready():
     print(f"تم تسجيل الدخول بنجاح باسم: {bot.user.name}")
-    # محاولة الاتصال بالروم الصوتي فور تشغيل البوت
     try:
         channel = bot.get_channel(VOICE_CHANNEL_ID)
         if channel:
@@ -120,6 +122,29 @@ async def on_message(message):
 
     content = message.content.strip()
 
+    # --- أمر "تعال" لدخول البوت لروم الشخص الصوتي عند الاستدعاء أو المنشن ---
+    if "تعال" in content:
+        if bot.user in message.mentions or content == "تعال":
+            if message.author.voice and message.author.voice.channel:
+                target_channel = message.author.voice.channel
+                voice_client = message.guild.voice_client
+                try:
+                    if voice_client and voice_client.is_connected():
+                        await voice_client.move_to(target_channel)
+                    else:
+                        await target_channel.connect(reconnect=True, self_deaf=True)
+                    
+                    try:
+                        await message.add_reaction("✅")
+                    except Exception:
+                        pass
+                    return await message.reply(f"تم الانضمام إلى **{target_channel.name}** 👋", mention_author=False)
+                except Exception as e:
+                    print(f"خطأ في الانضمام للروم عبر أمر تعال: {e}")
+                    return await message.reply("تعذر الانضمام لرومك الصوتي.", mention_author=False)
+            else:
+                return await message.reply("يجب أن تكون متواجدًا في روم صوتي أولاً!", mention_author=False)
+
     # 1. أمر التشغيل من YouTube
     if content.startswith("ش "):
         song_query = content[2:].strip()
@@ -135,7 +160,6 @@ async def on_message(message):
         async with message.channel.typing():
             try:
                 loop = asyncio.get_event_loop()
-                # البحث في يوتيوب عبر ytsearch
                 search_target = song_query if song_query.startswith(("http://", "https://")) else f"ytsearch:{song_query}"
                 data = await loop.run_in_executor(
                     None,
@@ -188,7 +212,7 @@ async def on_message(message):
             stop_text = f"*Stopped playing by* : **{message.author.display_name}**"
             await message.reply(stop_text, mention_author=False)
 
-    # 3. أمر تقديم الثواني (مُصلح ومحسّن)
+    # 3. أمر تقديم الثواني
     elif content.startswith("قدم"):
         parts = content.split()
         if len(parts) > 1 and parts[1].isdigit():
@@ -197,7 +221,6 @@ async def on_message(message):
 
             if voice_client and (voice_client.is_playing() or voice_client.is_paused()) and current_song_info.get("url"):
                 try:
-                    # احتساب الوقت المنقضي الفعلي إضافة إلى القيمة السابقة
                     elapsed = int(time.time() - song_start_time) if song_start_time > 0 else 0
                     new_pos = current_song_info.get("current_position", 0) + elapsed + seconds_to_seek
                     
