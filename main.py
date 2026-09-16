@@ -76,12 +76,22 @@ FFMPEG_OPTIONS = {
     "options": "-vn -filter:a \"volume=1.0\"",
 }
 
-ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
-
 @bot.event
 async def on_ready():
     print(f"تم تسجيل الدخول بنجاح باسم: {bot.user.name}")
-    keep_afk_voice.start()
+    # محاولة الاتصال بالروم الصوتي فور تشغيل البوت
+    try:
+        channel = bot.get_channel(VOICE_CHANNEL_ID)
+        if channel:
+            voice_client = channel.guild.voice_client
+            if not voice_client or not voice_client.is_connected():
+                await channel.connect(reconnect=True, self_deaf=True)
+                print("تم الاتصال بالروم الصوتي بنجاح!")
+    except Exception as e:
+        print(f"خطأ في الاتصال الأولي بالروم: {e}")
+        
+    if not keep_afk_voice.is_running():
+        keep_afk_voice.start()
 
 @tasks.loop(seconds=10)
 async def keep_afk_voice():
