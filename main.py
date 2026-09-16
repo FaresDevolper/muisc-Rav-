@@ -1,8 +1,6 @@
 import asyncio
-import io
 import os
 import threading
-import time
 import discord
 from discord.ext import commands, tasks
 from flask import Flask
@@ -13,7 +11,7 @@ app = Flask("")
 
 @app.route("/")
 def home():
-    return "Music Bot (SoundCloud) is Alive!"
+    return "Music Bot is Alive!"
 
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
@@ -35,10 +33,9 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 VOICE_CHANNEL_ID = 1545761345352507503 
 TEXT_CHANNEL_ID = 1545761345352507503   
 
-current_volume = 1.0
-current_song_info = {}
-song_start_time = 0 
+current_volume = 1.0  # الصوت الافتراضي (100%)
 
+# إعدادات البحث من SoundCloud
 YTDL_OPTIONS = {
     "format": "bestaudio/best",
     "noplaylist": True,
@@ -53,7 +50,7 @@ YTDL_OPTIONS = {
 
 FFMPEG_OPTIONS = {
     "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-    "options": "-vn -filter:a \"volume=1.0\"",
+    "options": "-vn",
 }
 
 ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
@@ -91,7 +88,7 @@ async def keep_afk_voice():
 
 @bot.event
 async def on_message(message):
-    global current_volume, current_song_info, song_start_time
+    global current_volume
 
     if message.author.bot:
         return
@@ -101,8 +98,8 @@ async def on_message(message):
 
     content = message.content.strip()
 
-    # --- أمر تعال ---
-    if content == "تعال" or (bot.user in message.mentions and "تعال" in content):
+    # 1. أمر تعال مع منشن البوت
+    if bot.user in message.mentions and "تعال" in content:
         if message.author.voice and message.author.voice.channel:
             target_channel = message.author.voice.channel
             voice_client = message.guild.voice_client
@@ -123,8 +120,8 @@ async def on_message(message):
         else:
             return await message.reply("يجب أن تكون متواجدًا في روم صوتي أولاً!", mention_author=False)
 
-    # 1. أمر التشغيل
-    if content.startswith("ش "):
+    # 2. أمر التشغيل (ش <اسم الأغنية>)
+    elif content.startswith("ش "):
         song_query = content[2:].strip()
         if not song_query:
             return
@@ -157,18 +154,7 @@ async def on_message(message):
                 data = data["entries"][0]
 
             stream_url = data["url"]
-            webpage_url = data.get("webpage_url", search_target)
             song_title = data.get("title", "Unknown Title")
-
-            current_song_info = {
-                "title": song_title,
-                "url": stream_url,
-                "webpage_url": webpage_url,
-                "duration": data.get("duration", 0),
-                "requester": message.author.display_name,
-                "current_position": 0
-            }
-            song_start_time = time.time()
 
             if voice_client.is_playing() or voice_client.is_paused():
                 voice_client.stop()
@@ -188,74 +174,7 @@ async def on_message(message):
             print(f"خطأ أثناء جلب المقطع من ساوندكلاود: {e}")
             await message.reply(f"حدث خطأ أثناء التشغيل: `{e}`", mention_author=False)
 
-    # 2. أمر الإيقاف
-    elif content == "وقف":
-        voice_client = message.guild.voice_client
-        if voice_client and (voice_client.is_playing() or voice_client.is_paused()):
-            voice_client.stop()
-            current_song_info = {}
-            try:
-                await message.add_reaction("⛔")
-            except Exception:
-                pass
-            stop_text = f"*Stopped playing by* : **{message.author.display_name}**"
-            await message.reply(stop_text, mention_author=False)
-
-    # 3. أمر التقديم المضمون (إعادة جلب الرابط لضمان عدم توقف الصوت)
-    elif content.startswith("قدم"):
-        parts = content.split()
-        if len(parts) > 1 and parts[1].isdigit():
-            seconds_to_seek = int(parts[1])
-            voice_client = message.guild.voice_client
-
-            if voice_client and (voice_client.is_playing() or voice_client.is_paused()) and current_song_info.get("webpage_url"):
-                try:
-                    elapsed = int(time.time() - song_start_time) if song_start_time > 0 else 0
-                    new_pos = current_song_info.get("current_position", 0) + elapsed + seconds_to_seek
-                    
-                    current_song_info["current_position"] = new_pos
-                    song_start_time = time.time()
-
-                    voice_client.stop()
-
-                    # جلب رابط حديث للمقطع لتفادي الانتهاء
-                    loop = asyncio.get_event_loop()
-                    fresh_data = await loop.run_in_executor(
-                        None,
-                        lambda: ytdl.extract_info(current_song_info["webpage_url"], download=False)
-                    )
-                    
-                    if "entries" in fresh_data and len(fresh_data["entries"]) > 0:
-                        fresh_data = fresh_data["entries"][0]
-                        
-                    fresh_stream_url = fresh_data["url"]
-
-                    seek_ffmpeg_options = {
-                        "before_options": f"-ss {new_pos} -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-                        "options": "-vn"
-                    }
-
-                    source = discord.FFmpegPCMAudio(fresh_stream_url, **seek_ffmpeg_options)
-                    transformer = discord.PCMVolumeTransformer(source, volume=current_volume)
-
-                    voice_client.play(
-                        transformer,
-                        after=lambda e: print(f"خطأ بعد التقديم: {e}") if e else None
-                    )
-
-                    try:
-                        await message.add_reaction("✅")
-                    except Exception:
-                        pass
-
-                    seek_text = f"*Forwarded* `{seconds_to_seek}` *seconds by* : **{message.author.display_name}**"
-                    await message.reply(seek_text, mention_author=False)
-
-                except Exception as e:
-                    print(f"خطأ أثناء تقديم الأغنية: {e}")
-                    await message.reply("تعذر تقديم المقطع.", mention_author=False)
-
-    # 4. أمر التحكم بالصوت
+    # 3. أمر التحكم بالصوت (ص <الرقم>)
     elif content.startswith("ص "):
         parts = content.split()
         if len(parts) > 1 and parts[1].isdigit():
@@ -272,39 +191,32 @@ async def on_message(message):
                 reply_text = f"*Volume changed from* `{old_vol_percent}%` *to* `{new_vol}%` ."
                 await message.reply(reply_text, mention_author=False)
 
-    # 5. أمر الاستئناف
-    elif content == "كمل":
+    # 4. أمر الإيقاف (وقف)
+    elif content == "وقف":
         voice_client = message.guild.voice_client
-        if voice_client and voice_client.is_paused():
-            voice_client.resume()
+        if voice_client and (voice_client.is_playing() or voice_client.is_paused()):
+            voice_client.stop()
             try:
-                await message.add_reaction("▶️")
+                await message.add_reaction("⛔")
             except Exception:
                 pass
-            await message.reply(f"*Resumed by* : **{message.author.display_name}**", mention_author=False)
+            stop_text = f"*Stopped playing by* : **{message.author.display_name}**"
+            await message.reply(stop_text, mention_author=False)
 
-    # 6. أمر إعادة الاتصال
-    elif content == "دخول خروج":
-        channel = bot.get_channel(VOICE_CHANNEL_ID)
-        if channel:
-            voice_client = message.guild.voice_client
+    # 5. أمر الخروج (خروج)
+    elif content == "خروج":
+        voice_client = message.guild.voice_client
+        if voice_client and voice_client.is_connected():
             try:
-                if voice_client and voice_client.is_connected():
-                    await voice_client.disconnect(force=True)
-                    await asyncio.sleep(1)
-
-                await channel.connect(reconnect=True, self_deaf=True)
-                
+                await voice_client.disconnect(force=True)
                 try:
-                    await message.add_reaction("🔄")
+                    await message.add_reaction("👋")
                 except Exception:
                     pass
-                
-                reply_text = f"*Reconnected to voice channel by* : **{message.author.display_name}**"
-                await message.reply(reply_text, mention_author=False)
+                await message.reply("تم الخروج من الروم الصوتي بنجاح.", mention_author=False)
             except Exception as e:
-                print(f"خطأ أثناء إعادة الدخول للروم: {e}")
-                await message.reply(f"حدث خطأ أثناء محاولة إعادة الاتصال: `{e}`", mention_author=False)
+                print(f"خطأ أثناء خروج البوت: {e}")
+                await message.reply(f"حدث خطأ أثناء الخروج: `{e}`", mention_author=False)
 
 keep_alive()
 
