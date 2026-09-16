@@ -92,7 +92,7 @@ async def on_message(message):
 
     content = message.content.strip()
 
-    # 1. أمر التشغيل
+    # 1. أمر التشغيل (SoundCloud)
     if content.startswith("ش "):
         song_query = content[2:].strip()
         if not song_query:
@@ -156,7 +156,7 @@ async def on_message(message):
             stop_text = f"*Stopped playing by* : **{message.author.display_name}**"
             await message.reply(stop_text, mention_author=False)
 
-    # 3. أمر تقديم الثواني (معدل ومُصلح)
+    # 3. أمر تقديم الثواني (بدون تسريع وبأقل تأخير)
     elif content.startswith("قدم"):
         parts = content.split()
         if len(parts) > 1 and parts[1].isdigit():
@@ -170,10 +170,12 @@ async def on_message(message):
 
                     voice_client.stop()
 
-                    seek_options = FFMPEG_OPTIONS.copy()
-                    seek_options["options"] = f"-vn -ss {new_pos}"
+                    fast_seek_options = {
+                        "before_options": f"-ss {new_pos} -probesize 32k -analyzeduration 0",
+                        "options": "-vn"
+                    }
 
-                    source = discord.FFmpegPCMAudio(current_song_info["url"], **seek_options)
+                    source = discord.FFmpegPCMAudio(current_song_info["url"], **fast_seek_options)
                     transformer = discord.PCMVolumeTransformer(source, volume=current_volume)
 
                     voice_client.play(transformer)
