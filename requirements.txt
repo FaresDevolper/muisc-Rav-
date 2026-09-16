@@ -1,4 +1,4 @@
-discord.py
-pynacl
+discord.py[voice]
+PyNaCl
 yt-dlp
-flask
+Flask
