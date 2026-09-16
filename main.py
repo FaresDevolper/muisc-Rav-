@@ -56,17 +56,16 @@ song_start_time = 0  # لتتبع زمن التشغيل للتقديم السل�
 # خيارات البحث واستخراج الصوت من يوتيوب مع دعم الكوكيز
 YTDL_OPTIONS = {
     "format": "bestaudio/best",
-    "extractaudio": True,
-    "audioformat": "mp3",
-    "restrictfilenames": True,
     "noplaylist": True,
     "nocheckcertificate": True,
     "ignoreerrors": False,
     "logtostderr": False,
     "quiet": True,
     "no_warnings": True,
-    "default_search": "ytsearch", # تم التغيير إلى يوتيوب بدلاً من SoundCloud
+    "default_search": "ytsearch",
     "source_address": "0.0.0.0",
+    "extract_flat": False,
+    "force_generic_extractor": False,
 }
 
 if os.path.exists(COOKIES_FILE):
@@ -74,7 +73,7 @@ if os.path.exists(COOKIES_FILE):
 
 FFMPEG_OPTIONS = {
     "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-    "options": "-vn",
+    "options": "-vn -filter:a \"volume=1.0\"",
 }
 
 ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
