@@ -8,22 +8,12 @@ from discord.ext import commands, tasks
 from flask import Flask
 import yt_dlp
 
-# --- إعداد الكوكيز ---
-COOKIES_FILE = "cookies.txt"
-cookies_env = os.environ.get("YOUTUBE_COOKIES")
-if cookies_env:
-    with open(COOKIES_FILE, "w", encoding="utf-8") as f:
-        f.write(cookies_env)
-    print("تم تحميل الكوكيز بنجاح.")
-elif os.path.exists(COOKIES_FILE):
-    print("تم العثور على ملف cookies.txt المحلي.")
-
-# --- سيرفر Flask لـ Render ---
+# --- سيرفر Flask لضمان استمرار عمل البوت على Render ---
 app = Flask("")
 
 @app.route("/")
 def home():
-    return "Music Bot is Alive!"
+    return "Music Bot (SoundCloud) is Alive!"
 
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
@@ -42,14 +32,15 @@ intents.guilds = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# غيّر هذا الرقم إلى ID الروم الصوتي الجديد
-VOICE_CHANNEL_ID = 1549782402694516736 
-TEXT_CHANNEL_ID = 1549782402694516736   
+# الآيدي المرفق من قبلك
+VOICE_CHANNEL_ID = 1545761345352507503 
+TEXT_CHANNEL_ID = 1545761345352507503   
 
 current_volume = 1.0
 current_song_info = {}
 song_start_time = 0 
 
+# إعدادات البحث والاستخراج الخاصة بـ SoundCloud فقط
 YTDL_OPTIONS = {
     "format": "bestaudio/best",
     "noplaylist": True,
@@ -58,14 +49,9 @@ YTDL_OPTIONS = {
     "logtostderr": False,
     "quiet": True,
     "no_warnings": True,
-    "default_search": "ytsearch",
+    "default_search": "scsearch",  # البحث المباشر عبر SoundCloud
     "source_address": "0.0.0.0",
-    "extract_flat": False,
-    "force_generic_extractor": False,
 }
-
-if os.path.exists(COOKIES_FILE):
-    YTDL_OPTIONS["cookiefile"] = COOKIES_FILE
 
 FFMPEG_OPTIONS = {
     "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
@@ -85,7 +71,7 @@ async def on_ready():
                 await channel.connect(reconnect=True, self_deaf=True)
                 print("تم الاتصال بالروم الصوتي بنجاح!")
     except Exception as e:
-        print(f"خطأ في الاتصال الأولي: {e}")
+        print(f"خطأ في الاتصال الأولي بالروم: {e}")
         
     if not keep_afk_voice.is_running():
         keep_afk_voice.start()
@@ -117,7 +103,7 @@ async def on_message(message):
 
     content = message.content.strip()
 
-    # --- أمر تعال ---
+    # --- أمر "تعال" للدخول إلى رومك الصوتي الحاضر فيه ---
     if content == "تعال" or (bot.user in message.mentions and "تعال" in content):
         if message.author.voice and message.author.voice.channel:
             target_channel = message.author.voice.channel
@@ -134,12 +120,12 @@ async def on_message(message):
                     pass
                 return await message.reply(f"تم الانضمام إلى **{target_channel.name}** 👋", mention_author=False)
             except Exception as e:
-                print(f"تفاصيل الخطأ الكاملة عند دخول الروم: {e}")
-                return await message.reply(f"تعذر الانضمام: `{e}`", mention_author=False)
+                print(f"خطأ عند دخول الروم عبر أمر تعال: {e}")
+                return await message.reply("تعذر الانضمام لرومك الصوتي.", mention_author=False)
         else:
             return await message.reply("يجب أن تكون متواجدًا في روم صوتي أولاً!", mention_author=False)
 
-    # 1. أمر التشغيل
+    # 1. أمر التشغيل (شاسم الأغنية أو رابط ساوندكلاود)
     if content.startswith("ش "):
         song_query = content[2:].strip()
         if not song_query:
@@ -157,7 +143,8 @@ async def on_message(message):
         async with message.channel.typing():
             try:
                 loop = asyncio.get_event_loop()
-                search_target = song_query if song_query.startswith(("http://", "https://")) else f"ytsearch:{song_query}"
+                search_target = song_query if song_query.startswith(("http://", "https://")) else f"scsearch:{song_query}"
+                
                 data = await loop.run_in_executor(
                     None,
                     lambda: ytdl.extract_info(search_target, download=False),
@@ -193,8 +180,8 @@ async def on_message(message):
                 await message.reply(response_text, mention_author=False)
 
             except Exception as e:
-                print(f"خطأ أثناء جلب المقطع: {e}")
-                await message.reply("حدث خطأ أثناء محاولة تشغيل المقطع.", mention_author=False)
+                print(f"خطأ أثناء جلب المقطع من ساوندكلاود: {e}")
+                await message.reply("حدث خطأ أثناء محاولة تشغيل المقطع من SoundCloud.", mention_author=False)
 
     # 2. أمر الإيقاف
     elif content == "وقف":
