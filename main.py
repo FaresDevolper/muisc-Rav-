@@ -39,7 +39,6 @@ current_volume = 1.0
 current_song_info = {}
 song_start_time = 0 
 
-# إعدادات سرعة البحث والجلب من SoundCloud
 YTDL_OPTIONS = {
     "format": "bestaudio/best",
     "noplaylist": True,
@@ -50,7 +49,6 @@ YTDL_OPTIONS = {
     "no_warnings": True,
     "default_search": "scsearch",
     "source_address": "0.0.0.0",
-    "extract_flat": False,
 }
 
 FFMPEG_OPTIONS = {
@@ -125,7 +123,7 @@ async def on_message(message):
         else:
             return await message.reply("يجب أن تكون متواجدًا في روم صوتي أولاً!", mention_author=False)
 
-    # 1. أمر التشغيل السريع
+    # 1. أمر التشغيل
     if content.startswith("ش "):
         song_query = content[2:].strip()
         if not song_query:
@@ -159,11 +157,13 @@ async def on_message(message):
                 data = data["entries"][0]
 
             stream_url = data["url"]
+            webpage_url = data.get("webpage_url", search_target)
             song_title = data.get("title", "Unknown Title")
 
             current_song_info = {
                 "title": song_title,
                 "url": stream_url,
+                "webpage_url": webpage_url,
                 "duration": data.get("duration", 0),
                 "requester": message.author.display_name,
                 "current_position": 0
@@ -201,14 +201,14 @@ async def on_message(message):
             stop_text = f"*Stopped playing by* : **{message.author.display_name}**"
             await message.reply(stop_text, mention_author=False)
 
-    # 3. أمر التقديم المصلح والمباشر
+    # 3. أمر التقديم المضمون (إعادة جلب الرابط لضمان عدم توقف الصوت)
     elif content.startswith("قدم"):
         parts = content.split()
         if len(parts) > 1 and parts[1].isdigit():
             seconds_to_seek = int(parts[1])
             voice_client = message.guild.voice_client
 
-            if voice_client and (voice_client.is_playing() or voice_client.is_paused()) and current_song_info.get("url"):
+            if voice_client and (voice_client.is_playing() or voice_client.is_paused()) and current_song_info.get("webpage_url"):
                 try:
                     elapsed = int(time.time() - song_start_time) if song_start_time > 0 else 0
                     new_pos = current_song_info.get("current_position", 0) + elapsed + seconds_to_seek
@@ -218,15 +218,28 @@ async def on_message(message):
 
                     voice_client.stop()
 
+                    # جلب رابط حديث للمقطع لتفادي الانتهاء
+                    loop = asyncio.get_event_loop()
+                    fresh_data = await loop.run_in_executor(
+                        None,
+                        lambda: ytdl.extract_info(current_song_info["webpage_url"], download=False)
+                    )
+                    
+                    if "entries" in fresh_data and len(fresh_data["entries"]) > 0:
+                        fresh_data = fresh_data["entries"][0]
+                        
+                    fresh_stream_url = fresh_data["url"]
+
                     seek_ffmpeg_options = {
                         "before_options": f"-ss {new_pos} -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-                        "options": f"-vn -filter:a \"volume={current_volume}\""
+                        "options": "-vn"
                     }
 
-                    source = discord.FFmpegPCMAudio(current_song_info["url"], **seek_ffmpeg_options)
+                    source = discord.FFmpegPCMAudio(fresh_stream_url, **seek_ffmpeg_options)
+                    transformer = discord.PCMVolumeTransformer(source, volume=current_volume)
 
                     voice_client.play(
-                        source,
+                        transformer,
                         after=lambda e: print(f"خطأ بعد التقديم: {e}") if e else None
                     )
 
@@ -240,6 +253,7 @@ async def on_message(message):
 
                 except Exception as e:
                     print(f"خطأ أثناء تقديم الأغنية: {e}")
+                    await message.reply("تعذر تقديم المقطع.", mention_author=False)
 
     # 4. أمر التحكم بالصوت
     elif content.startswith("ص "):
