@@ -123,6 +123,7 @@ async def on_message(message):
                     "url": stream_url,
                     "duration": data.get("duration", 0),
                     "requester": message.author.display_name,
+                    "current_position": 0
                 }
 
                 if voice_client.is_playing() or voice_client.is_paused():
@@ -155,18 +156,22 @@ async def on_message(message):
             stop_text = f"*Stopped playing by* : **{message.author.display_name}**"
             await message.reply(stop_text, mention_author=False)
 
-    # 3. أمر تقديم الثواني
+    # 3. أمر تقديم الثواني (معدل ومُصلح)
     elif content.startswith("قدم"):
         parts = content.split()
         if len(parts) > 1 and parts[1].isdigit():
             seconds_to_seek = int(parts[1])
             voice_client = message.guild.voice_client
 
-            if voice_client and voice_client.is_playing() and current_song_info.get("url"):
+            if voice_client and (voice_client.is_playing() or voice_client.is_paused()) and current_song_info.get("url"):
                 try:
+                    current_song_info["current_position"] = current_song_info.get("current_position", 0) + seconds_to_seek
+                    new_pos = current_song_info["current_position"]
+
                     voice_client.stop()
+
                     seek_options = FFMPEG_OPTIONS.copy()
-                    seek_options["before_options"] += f" -ss {seconds_to_seek}"
+                    seek_options["options"] = f"-vn -ss {new_pos}"
 
                     source = discord.FFmpegPCMAudio(current_song_info["url"], **seek_options)
                     transformer = discord.PCMVolumeTransformer(source, volume=current_volume)
@@ -211,18 +216,16 @@ async def on_message(message):
                 pass
             await message.reply(f"*Resumed by* : **{message.author.display_name}**", mention_author=False)
 
-    # 6. أمر دخول خروج (الأمر الجديد)
+    # 6. أمر دخول خروج
     elif content == "دخول خروج":
         channel = bot.get_channel(VOICE_CHANNEL_ID)
         if channel:
             voice_client = message.guild.voice_client
             try:
-                # إذا كان متصلاً بالفعل، اقطع الاتصال أولاً
                 if voice_client and voice_client.is_connected():
                     await voice_client.disconnect(force=True)
-                    await asyncio.sleep(1)  # الانتظار ثانية لضمان نجاح قطع الاتصال
+                    await asyncio.sleep(1)
 
-                # إعادة الاتصال بالروم
                 await channel.connect(reconnect=True, self_deaf=True)
                 
                 try:
