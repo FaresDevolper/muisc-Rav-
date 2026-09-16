@@ -8,21 +8,17 @@ from discord.ext import commands, tasks
 from flask import Flask
 import yt_dlp
 
-# --- إعداد الكوكيز للتعامل مع يوتيوب بأمان ---
+# --- إعداد الكوكيز ---
 COOKIES_FILE = "cookies.txt"
-
-# إذا تم إدخال الكوكيز كـ Environment Variable في Render
 cookies_env = os.environ.get("YOUTUBE_COOKIES")
 if cookies_env:
     with open(COOKIES_FILE, "w", encoding="utf-8") as f:
         f.write(cookies_env)
-    print("تم تحميل الكوكيز بنجاح من متغير البيئة YOUTUBE_COOKIES.")
+    print("تم تحميل الكوكيز بنجاح.")
 elif os.path.exists(COOKIES_FILE):
-    print("تم العثور على ملف cookies.txt المحلي وسيتم استخدامه.")
-else:
-    print("تحذير: لم يتم العثور على كوكيز يوتيوب، قد تتأثر بعض مقاطع يوتيوب.")
+    print("تم العثور على ملف cookies.txt المحلي.")
 
-# --- سيرفر Flask لضمان استمرار عمل البوت على Render ---
+# --- سيرفر Flask لـ Render ---
 app = Flask("")
 
 @app.route("/")
@@ -44,16 +40,16 @@ intents.message_content = True
 intents.voice_states = True
 intents.guilds = True
 
-bot = commands.Bot(command_prefix="", intents=intents)
+# تم إيقاف الـ Command Processing التلقائي لتجنب أخطاء CommandNotFound
+bot = commands.Bot(command_prefix="!", intents=intents)
 
-VOICE_CHANNEL_ID = 1545761345352507503  # أيدي روم الصوت الافتراضي
-TEXT_CHANNEL_ID = 1545761345352507503   # أيدي الشات
+VOICE_CHANNEL_ID = 1545761345352507503 
+TEXT_CHANNEL_ID = 1545761345352507503   
 
 current_volume = 1.0
 current_song_info = {}
-song_start_time = 0  # لتتبع زمن التشغيل للتقديم السليم
+song_start_time = 0 
 
-# خيارات البحث واستخراج الصوت من يوتيوب مع دعم الكوكيز
 YTDL_OPTIONS = {
     "format": "bestaudio/best",
     "noplaylist": True,
@@ -76,7 +72,6 @@ FFMPEG_OPTIONS = {
     "options": "-vn -filter:a \"volume=1.0\"",
 }
 
-# --- تعريف كائن ytdl (السطر الذي كان مفقوداً) ---
 ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
 
 @bot.event
@@ -88,9 +83,9 @@ async def on_ready():
             voice_client = channel.guild.voice_client
             if not voice_client or not voice_client.is_connected():
                 await channel.connect(reconnect=True, self_deaf=True)
-                print("تم الاتصال بالروم الصوتي بنجاح!")
+                print("تم الاتصال بالروم الصوتي الافتراضي بنجاح!")
     except Exception as e:
-        print(f"خطأ في الاتصال الأولي بالروم: {e}")
+        print(f"خطأ في الاتصال الأولي: {e}")
         
     if not keep_afk_voice.is_running():
         keep_afk_voice.start()
@@ -108,7 +103,7 @@ async def keep_afk_voice():
         if not voice_client or not voice_client.is_connected():
             await channel.connect(reconnect=True, self_deaf=True)
     except Exception as e:
-        print(f"خطأ في الاتصال بالروم الصوتي: {e}")
+        print(f"خطأ في الاتصال الدوري بالروم: {e}")
 
 @bot.event
 async def on_message(message):
@@ -122,30 +117,29 @@ async def on_message(message):
 
     content = message.content.strip()
 
-    # --- أمر "تعال" لدخول البوت لروم الشخص الصوتي عند الاستدعاء أو المنشن ---
-    if "تعال" in content:
-        if bot.user in message.mentions or content == "تعال":
-            if message.author.voice and message.author.voice.channel:
-                target_channel = message.author.voice.channel
-                voice_client = message.guild.voice_client
+    # --- أمر تعال (يدعم الكلمة بمفردها أو مع منشن) ---
+    if content == "تعال" or (bot.user in message.mentions and "تعال" in content):
+        if message.author.voice and message.author.voice.channel:
+            target_channel = message.author.voice.channel
+            voice_client = message.guild.voice_client
+            try:
+                if voice_client and voice_client.is_connected():
+                    await voice_client.move_to(target_channel)
+                else:
+                    await target_channel.connect(reconnect=True, self_deaf=True)
+                
                 try:
-                    if voice_client and voice_client.is_connected():
-                        await voice_client.move_to(target_channel)
-                    else:
-                        await target_channel.connect(reconnect=True, self_deaf=True)
-                    
-                    try:
-                        await message.add_reaction("✅")
-                    except Exception:
-                        pass
-                    return await message.reply(f"تم الانضمام إلى **{target_channel.name}** 👋", mention_author=False)
-                except Exception as e:
-                    print(f"خطأ في الانضمام للروم عبر أمر تعال: {e}")
-                    return await message.reply("تعذر الانضمام لرومك الصوتي.", mention_author=False)
-            else:
-                return await message.reply("يجب أن تكون متواجدًا في روم صوتي أولاً!", mention_author=False)
+                    await message.add_reaction("✅")
+                except Exception:
+                    pass
+                return await message.reply(f"تم الانضمام إلى **{target_channel.name}** 👋", mention_author=False)
+            except Exception as e:
+                print(f"خطأ في الانضمام عبر أمر تعال: {e}")
+                return await message.reply("تعذر الانضمام لرومك الصوتي. تأكد من إعطاء البوت صلاحية Connect و Speak في الروم!", mention_author=False)
+        else:
+            return await message.reply("يجب أن تكون متواجدًا في روم صوتي أولاً!", mention_author=False)
 
-    # 1. أمر التشغيل من YouTube
+    # 1. أمر التشغيل
     if content.startswith("ش "):
         song_query = content[2:].strip()
         if not song_query:
@@ -153,9 +147,12 @@ async def on_message(message):
 
         voice_client = message.guild.voice_client
         if not voice_client or not voice_client.is_connected():
-            channel = bot.get_channel(VOICE_CHANNEL_ID)
-            if channel:
-                voice_client = await channel.connect(reconnect=True, self_deaf=True)
+            if message.author.voice and message.author.voice.channel:
+                voice_client = await message.author.voice.channel.connect(reconnect=True, self_deaf=True)
+            else:
+                channel = bot.get_channel(VOICE_CHANNEL_ID)
+                if channel:
+                    voice_client = await channel.connect(reconnect=True, self_deaf=True)
 
         async with message.channel.typing():
             try:
@@ -196,8 +193,8 @@ async def on_message(message):
                 await message.reply(response_text, mention_author=False)
 
             except Exception as e:
-                print(f"خطأ أثناء جلب المقطع من يوتيوب: {e}")
-                await message.reply("حدث خطأ أثناء محاولة تشغيل المقطع من يوتيوب.", mention_author=False)
+                print(f"خطأ أثناء جلب المقطع: {e}")
+                await message.reply("حدث خطأ أثناء محاولة تشغيل المقطع.", mention_author=False)
 
     # 2. أمر الإيقاف
     elif content == "وقف":
@@ -212,7 +209,7 @@ async def on_message(message):
             stop_text = f"*Stopped playing by* : **{message.author.display_name}**"
             await message.reply(stop_text, mention_author=False)
 
-    # 3. أمر تقديم الثواني
+    # 3. أمر التقديم
     elif content.startswith("قدم"):
         parts = content.split()
         if len(parts) > 1 and parts[1].isdigit():
@@ -266,7 +263,7 @@ async def on_message(message):
                 reply_text = f"*Volume changed from* `{old_vol_percent}%` *to* `{new_vol}%` ."
                 await message.reply(reply_text, mention_author=False)
 
-    # 5. أمر استئناف التشغيل
+    # 5. أمر الاستئناف
     elif content == "كمل":
         voice_client = message.guild.voice_client
         if voice_client and voice_client.is_paused():
@@ -277,7 +274,7 @@ async def on_message(message):
                 pass
             await message.reply(f"*Resumed by* : **{message.author.display_name}**", mention_author=False)
 
-    # 6. أمر دخول خروج
+    # 6. أمر إعادة الاتصال
     elif content == "دخول خروج":
         channel = bot.get_channel(VOICE_CHANNEL_ID)
         if channel:
@@ -299,8 +296,6 @@ async def on_message(message):
             except Exception as e:
                 print(f"خطأ أثناء إعادة الدخول للروم: {e}")
                 await message.reply("حدث خطأ أثناء محاولة إعادة الاتصال بالروم.", mention_author=False)
-
-    await bot.process_commands(message)
 
 keep_alive()
 
