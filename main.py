@@ -56,8 +56,13 @@ YTDL_OPTIONS = {
     "logtostderr": False,
     "quiet": True,
     "no_warnings": True,
-    "default_search": "auto",
+    "default_search": "ytsearch",
     "source_address": "0.0.0.0",
+    "extractor_args": {
+        "youtube": {
+            "player_client": ["android", "ios"]
+        }
+    }
 }
 
 FFMPEG_OPTIONS = {
@@ -68,8 +73,6 @@ FFMPEG_OPTIONS = {
 }
 
 ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
-
-
 @bot.event
 async def on_ready():
   print(f"تم تسجيل الدخول بنجاح باسم: {bot.user.name}")
