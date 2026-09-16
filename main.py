@@ -31,8 +31,8 @@ intents.guilds = True
 
 bot = commands.Bot(command_prefix="", intents=intents)
 
-VOICE_CHANNEL_ID = 1549566092777619556  # أيدي روم الصوت
-TEXT_CHANNEL_ID = 1549566092777619556   # أيدي الشات
+VOICE_CHANNEL_ID = 1545761345352507503  # أيدي روم الصوت
+TEXT_CHANNEL_ID = 1545761345352507503   # أيدي الشات
 
 current_volume = 1.0
 current_song_info = {}
