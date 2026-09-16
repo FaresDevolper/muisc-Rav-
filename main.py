@@ -2,10 +2,25 @@ import asyncio
 import io
 import os
 import threading
+import time
 import discord
 from discord.ext import commands, tasks
 from flask import Flask
 import yt_dlp
+
+# --- إعداد الكوكيز للتعامل مع يوتيوب بأمان ---
+COOKIES_FILE = "cookies.txt"
+
+# إذا تم إدخال الكوكيز كـ Environment Variable في Render
+cookies_env = os.environ.get("YOUTUBE_COOKIES")
+if cookies_env:
+    with open(COOKIES_FILE, "w", encoding="utf-8") as f:
+        f.write(cookies_env)
+    print("تم تحميل الكوكيز بنجاح من متغير البيئة YOUTUBE_COOKIES.")
+elif os.path.exists(COOKIES_FILE):
+    print("تم العثور على ملف cookies.txt المحلي وسيتم استخدامه.")
+else:
+    print("تحذير: لم يتم العثور على كوكيز يوتيوب، قد تتأثر بعض مقاطع يوتيوب.")
 
 # --- سيرفر Flask لضمان استمرار عمل البوت على Render ---
 app = Flask("")
@@ -36,8 +51,9 @@ TEXT_CHANNEL_ID = 1545761345352507503   # أيدي الشات
 
 current_volume = 1.0
 current_song_info = {}
+song_start_time = 0  # لتتبع زمن التشغيل للتقديم السليم
 
-# خيارات البحث من SoundCloud لتفادي حظر يوتيوب نهائياً
+# خيارات البحث واستخراج الصوت من يوتيوب مع دعم الكوكيز
 YTDL_OPTIONS = {
     "format": "bestaudio/best",
     "extractaudio": True,
@@ -49,9 +65,12 @@ YTDL_OPTIONS = {
     "logtostderr": False,
     "quiet": True,
     "no_warnings": True,
-    "default_search": "scsearch", # استخدام SoundCloud للبحث المباشر
+    "default_search": "ytsearch", # تم التغيير إلى يوتيوب بدلاً من SoundCloud
     "source_address": "0.0.0.0",
 }
+
+if os.path.exists(COOKIES_FILE):
+    YTDL_OPTIONS["cookiefile"] = COOKIES_FILE
 
 FFMPEG_OPTIONS = {
     "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
@@ -82,7 +101,7 @@ async def keep_afk_voice():
 
 @bot.event
 async def on_message(message):
-    global current_volume, current_song_info
+    global current_volume, current_song_info, song_start_time
 
     if message.author.bot:
         return
@@ -92,7 +111,7 @@ async def on_message(message):
 
     content = message.content.strip()
 
-    # 1. أمر التشغيل (SoundCloud)
+    # 1. أمر التشغيل من YouTube
     if content.startswith("ش "):
         song_query = content[2:].strip()
         if not song_query:
@@ -107,9 +126,11 @@ async def on_message(message):
         async with message.channel.typing():
             try:
                 loop = asyncio.get_event_loop()
+                # البحث في يوتيوب عبر ytsearch
+                search_target = song_query if song_query.startswith(("http://", "https://")) else f"ytsearch:{song_query}"
                 data = await loop.run_in_executor(
                     None,
-                    lambda: ytdl.extract_info(f"scsearch:{song_query}", download=False),
+                    lambda: ytdl.extract_info(search_target, download=False),
                 )
 
                 if "entries" in data and len(data["entries"]) > 0:
@@ -125,6 +146,7 @@ async def on_message(message):
                     "requester": message.author.display_name,
                     "current_position": 0
                 }
+                song_start_time = time.time()
 
                 if voice_client.is_playing() or voice_client.is_paused():
                     voice_client.stop()
@@ -141,14 +163,15 @@ async def on_message(message):
                 await message.reply(response_text, mention_author=False)
 
             except Exception as e:
-                print(f"خطأ أثناء جلب الأغنية: {e}")
-                await message.reply("حدث خطأ أثناء محاولة تشغيل الأغنية.", mention_author=False)
+                print(f"خطأ أثناء جلب المقطع من يوتيوب: {e}")
+                await message.reply("حدث خطأ أثناء محاولة تشغيل المقطع من يوتيوب.", mention_author=False)
 
     # 2. أمر الإيقاف
     elif content == "وقف":
         voice_client = message.guild.voice_client
         if voice_client and (voice_client.is_playing() or voice_client.is_paused()):
             voice_client.stop()
+            current_song_info = {}
             try:
                 await message.add_reaction("⛔")
             except Exception:
@@ -156,7 +179,7 @@ async def on_message(message):
             stop_text = f"*Stopped playing by* : **{message.author.display_name}**"
             await message.reply(stop_text, mention_author=False)
 
-    # 3. أمر تقديم الثواني (مُصلح بالكامل ومستقر)
+    # 3. أمر تقديم الثواني (مُصلح ومحسّن)
     elif content.startswith("قدم"):
         parts = content.split()
         if len(parts) > 1 and parts[1].isdigit():
@@ -165,12 +188,15 @@ async def on_message(message):
 
             if voice_client and (voice_client.is_playing() or voice_client.is_paused()) and current_song_info.get("url"):
                 try:
-                    current_song_info["current_position"] = current_song_info.get("current_position", 0) + seconds_to_seek
-                    new_pos = current_song_info["current_position"]
+                    # احتساب الوقت المنقضي الفعلي إضافة إلى القيمة السابقة
+                    elapsed = int(time.time() - song_start_time) if song_start_time > 0 else 0
+                    new_pos = current_song_info.get("current_position", 0) + elapsed + seconds_to_seek
+                    
+                    current_song_info["current_position"] = new_pos
+                    song_start_time = time.time()
 
                     voice_client.stop()
 
-                    # إعدادات ثابتة ومستقرة تجبر FFmpeg على معالجة التقديم بدقة بدون إيقاف الصوت أو التسريع
                     seek_options = {
                         "before_options": f"-ss {new_pos} -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
                         "options": "-vn -fflags +genpts"
