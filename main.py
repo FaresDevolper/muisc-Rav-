@@ -156,7 +156,7 @@ async def on_message(message):
             stop_text = f"*Stopped playing by* : **{message.author.display_name}**"
             await message.reply(stop_text, mention_author=False)
 
-    # 3. أمر تقديم الثواني (بدون تسريع وبأقل تأخير)
+    # 3. أمر تقديم الثواني (مُصلح بالكامل ومستقر)
     elif content.startswith("قدم"):
         parts = content.split()
         if len(parts) > 1 and parts[1].isdigit():
@@ -170,12 +170,13 @@ async def on_message(message):
 
                     voice_client.stop()
 
-                    fast_seek_options = {
-                        "before_options": f"-ss {new_pos} -probesize 32k -analyzeduration 0",
-                        "options": "-vn"
+                    # إعدادات ثابتة ومستقرة تجبر FFmpeg على معالجة التقديم بدقة بدون إيقاف الصوت أو التسريع
+                    seek_options = {
+                        "before_options": f"-ss {new_pos} -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+                        "options": "-vn -fflags +genpts"
                     }
 
-                    source = discord.FFmpegPCMAudio(current_song_info["url"], **fast_seek_options)
+                    source = discord.FFmpegPCMAudio(current_song_info["url"], **seek_options)
                     transformer = discord.PCMVolumeTransformer(source, volume=current_volume)
 
                     voice_client.play(transformer)
